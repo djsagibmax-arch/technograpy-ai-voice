@@ -1,4 +1,6 @@
 import os
+import wave
+import io
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -56,7 +58,6 @@ def generate_audio(data: VoiceRequest):
             ),
         )
 
-        # অডিও বাইট এবং সঠিক মাইম টাইপ সংগ্রহ
         audio_part = None
         for part in response.candidates[0].content.parts:
             if part.inline_data:
@@ -64,12 +65,21 @@ def generate_audio(data: VoiceRequest):
                 break
 
         if not audio_part:
-            raise HTTPException(status_code=500, detail="গুগল থেকে অডিও তৈরি হয়নি।")
+            raise HTTPException(status_code=500, detail="গুগল থেকে অডিও ডাটা পাওয়া যায়নি।")
 
-        audio_bytes = audio_part.data
-        mime_type = audio_part.mime_type or "audio/wav"
+        raw_pcm_data = audio_part.data
 
-        return Response(content=audio_bytes, media_type=mime_type)
+        # কাঁচা PCM অডিওকে প্লে-যোগ্য স্ট্যান্ডার্ড WAV ফরম্যাটে রূপান্তর
+        wav_buffer = io.BytesIO()
+        with wave.open(wav_buffer, "wb") as wav_file:
+            wav_file.setnchannels(1)        # মোনো অডিও
+            wav_file.setsampwidth(2)       # ১৬-বিট
+            wav_file.setframerate(24000)   # গুগলের স্ট্যান্ডার্ড ২৪kHz রেট
+            wav_file.writeframes(raw_pcm_data)
+
+        wav_bytes = wav_buffer.getvalue()
+
+        return Response(content=wav_bytes, media_type="audio/wav")
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Google Studio সমস্যা: {str(e)}")
