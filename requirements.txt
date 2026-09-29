@@ -1,4 +1,4 @@
-fastapi
+fast API
 uvicorn
-edge-tts
+google-genai
 pydantic
