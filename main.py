@@ -8,7 +8,6 @@ from google.genai import types
 
 app = FastAPI(title="Google Studio Human Voice API")
 
-# ওয়েবসাইট থেকে ফেচ করার জন্য CORS পলিসি উন্মুক্ত রাখা
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,7 +16,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Render-এর Environment Variable থেকে সরাসরি API Key নেওয়া
 API_KEY = os.environ.get("GEMINI_API_KEY")
 
 class VoiceRequest(BaseModel):
@@ -40,15 +38,14 @@ def generate_audio(data: VoiceRequest):
         raise HTTPException(status_code=400, detail="দয়া করে টেক্সট লিখুন।")
 
     try:
-        # ক্লায়েন্ট তৈরি
         client = genai.Client(api_key=API_KEY)
 
-        # Google Gemini 2.5 Flash TTS মডেল কল
+        # অডিও মোডালিটি দিয়ে রিকোয়েস্ট
         response = client.models.generate_content(
             model="gemini-2.5-flash-preview-tts",
             contents=data.text.strip(),
             config=types.GenerateContentConfig(
-                response_mime_type="audio/mp3",
+                response_modalities=["AUDIO"],
                 speech_config=types.SpeechConfig(
                     voice_config=types.VoiceConfig(
                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
@@ -59,9 +56,20 @@ def generate_audio(data: VoiceRequest):
             ),
         )
 
-        # প্রাপ্ত অডিও বাইট এক্সট্র্যাক্ট করা
-        audio_bytes = response.candidates[0].content.parts[0].inline_data.data
-        return Response(content=audio_bytes, media_type="audio/mp3")
+        # অডিও বাইট এবং সঠিক মাইম টাইপ সংগ্রহ
+        audio_part = None
+        for part in response.candidates[0].content.parts:
+            if part.inline_data:
+                audio_part = part.inline_data
+                break
+
+        if not audio_part:
+            raise HTTPException(status_code=500, detail="গুগল থেকে অডিও তৈরি হয়নি।")
+
+        audio_bytes = audio_part.data
+        mime_type = audio_part.mime_type or "audio/wav"
+
+        return Response(content=audio_bytes, media_type=mime_type)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Google Studio সমস্যা: {str(e)}")
