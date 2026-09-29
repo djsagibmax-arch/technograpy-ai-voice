@@ -1,4 +1,4 @@
-fast API
+fastapi
 uvicorn
 google-genai
 pydantic
